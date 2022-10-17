@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
+
+	"github.com/pkg/errors"
 )
 
 type RestClient interface {
@@ -53,6 +56,22 @@ func WithHTTPClient(h *http.Client) Option {
 	}
 }
 
+var ErrBadStatusCode = errors.New("bad status code")
+
+func defaultErrorHandler(err error, req *http.Request, res *http.Response) (*http.Response, error) {
+	if err == nil {
+		err = ErrBadStatusCode
+	}
+	defer res.Body.Close()
+	body, err2 := ioutil.ReadAll(res.Body)
+	if err2 != nil {
+		return res, errors.Wrap(err, fmt.Sprintf("response code: %d", res.StatusCode))
+	}
+
+	return res, errors.Wrap(err, fmt.Sprintf("response code: %d, body:\n%s", res.StatusCode, string(body)))
+
+}
+
 func NewRestClient(baseURL string, opts ...Option) (*restClient, error) {
 	u, err := url.Parse(baseURL)
 	if err != nil {
@@ -67,6 +86,9 @@ func NewRestClient(baseURL string, opts ...Option) (*restClient, error) {
 	}
 	if c.httpClient == nil {
 		c.httpClient = http.DefaultClient
+	}
+	if c.handleErrorFunc == nil {
+		c.handleErrorFunc = defaultErrorHandler
 	}
 	return c, nil
 }
