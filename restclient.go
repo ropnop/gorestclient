@@ -4,14 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"path"
-
-	"github.com/pkg/errors"
 )
 
 type RestClient interface {
@@ -58,17 +57,17 @@ func WithHTTPClient(h *http.Client) Option {
 
 var ErrBadStatusCode = errors.New("bad status code")
 
-func defaultErrorHandler(err error, req *http.Request, res *http.Response) (*http.Response, error) {
+func DefaultErrorHandler(err error, req *http.Request, res *http.Response) (*http.Response, error) {
 	if err == nil {
 		err = ErrBadStatusCode
 	}
 	defer res.Body.Close()
 	body, err2 := ioutil.ReadAll(res.Body)
 	if err2 != nil {
-		return res, errors.Wrap(err, fmt.Sprintf("response code: %d", res.StatusCode))
+		return res, fmt.Errorf("error: %w, response code: %d", err, res.StatusCode)
 	}
 
-	return res, errors.Wrap(err, fmt.Sprintf("response code: %d, body:\n%s", res.StatusCode, string(body)))
+	return res, fmt.Errorf("error: %w, response code: %d, body:\n%s", err, res.StatusCode, string(body))
 
 }
 
@@ -86,9 +85,6 @@ func NewRestClient(baseURL string, opts ...Option) (*restClient, error) {
 	}
 	if c.httpClient == nil {
 		c.httpClient = http.DefaultClient
-	}
-	if c.handleErrorFunc == nil {
-		c.handleErrorFunc = defaultErrorHandler
 	}
 	return c, nil
 }
